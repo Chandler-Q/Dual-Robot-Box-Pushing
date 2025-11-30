@@ -1,21 +1,23 @@
 # Dual-Robot-Box-Pushing
-Dual-robot cooperative box-pushing system using Pololu 3pi+. Implements Asymmetric, Symmetric PID, and Phase-Based Sensor Fusion strategies. Uses bump and line sensors for real-time trajectory correction. Results show Strategy C (Sensor Fusion) achieves superior stability and accuracy over standard PID methods.
+This repository contains the firmware for a dual-robot system designed to cooperatively push a box. The code implements a Phase-Based Sensor Fusion Strategy (referred to as "Strategy C" in the associated research), combining PID speed control, heading correction, and real-time feedback from both collision (bump) and line sensors.
+
+Key Feature: The system operates in distinct time domains—utilizing bump sensors for initial alignment and line sensors for trajectory maintenance—and features a post-run data replay system for performance analysis.
 
 📖 Overview
 
-Collaborative mobile robots offer greater adaptability than fixed automation. This project implements a system where two differential-drive robots push a rectangular box (280g) along a 900mm straight track.
+The robots are programmed to push a 280g box along a straight 900mm track. To ensure stability and synchronization without explicit communication between robots, the system uses a local sensor fusion approach:
 
+Speed Synchronization: PID control on wheel encoders to maintain target velocity.
 
-The core objective is to evaluate how different control architectures affect stability, lateral drift, and angular deviation.
+Phase-Based Logic:
 
+0s - 6s (Bump Phase): Uses collision sensors to detect alignment errors (one robot leading/lagging) and adjust speed.
 
-The Three Strategies Evaluated:
+6s - 11s (Line Avoidance Phase): Uses IR line sensors to correct lateral drift.
 
-Strategy A (Asymmetric Control): Hybrid approach where one robot uses PID and the other uses Open-Loop fixed PWM. Acts as a baseline.
+>11s (Stop Phase): Detects the finish line and stops.
 
-Strategy B (Symmetric PID): Fully symmetric dual closed-loop architecture. Both robots use PID for speed and heading control.
-
-Strategy C (Sensor Fusion - Recommended): Optimised approach combining PID control with Line Sensor correction (lateral offset) and Bump Sensor alignment (phase synchronization).
+Data Logging: Records alignment state transitions in RAM and replays them via Serial after the run for analysis.
 
 ⚙️ Hardware & Environment
 
@@ -23,62 +25,90 @@ Robots: 2x Pololu 3pi+ (32U4 OLED Edition recommended).
 
 Sensors:
 
-Line Sensors (IR): 5-channel array (A11, A0, A2, A3, A4) for trajectory tracking.
+Line Sensors (5-Channel): For lateral correction and stop detection.
 
-Bump Sensors: Left/Right collision sensors (D5, A6) for detecting robot-box alignment.
+Bump Sensors (DIY): Uses capacitive discharge timing on pins A6 and D5 to detect physical contact with the box.
 
 Object: Rectangular Box (440 x 150 x 30 mm, 280g).
 
 Track: 900mm length with black boundary lines for visual feedback.
 
-🚀 Key Algorithms
+🚀 Software Architecture
 
-1. PID Speed & Heading Control
+The loop() function executes a strict 10ms control cycle with the following logic:
 
-Used in Strategy B and C. The system runs a control loop every 10ms.
+1. Control Phases (Time-Sequenced)
 
-Speed Loop: Maintains target velocity (KP=0.2,KI=0.001).
+The robot behavior changes based on elapsed time (millis()):
 
-Heading Loop: Synchronizes left/right wheel speeds (KP=0.8).
+Bump Phase (Start - 6s):
 
-2. Sensor Fusion Logic (Strategy C)
+The IR Emitter is OFF to save power/interference (optional).
 
-This is the most advanced feature of the repository:
+Reads Bump Sensors via readBumpTime().
 
-Lateral Correction: Uses the outer line sensors. If the robot drifts (triggers A11 or A4), a PWM correction (δ) is applied to steer back to the center.
+Logic: If Left Bumper is pressed (BL=0) but Right is not (BR=1), the robot assumes it is ahead on the left side and decelerates the left wheel / accelerates the right wheel to realign with the box.
 
-Alignment (Phase) Correction: Uses bump sensors to detect if one robot is ahead or behind the other.
+Line Avoidance Phase (6s - Finish):
 
-Front Press (Ahead): Reduce speed.
+IR Emitter is turned ON.
 
-Rear Press (Behind): Increase speed.
+Reads Line Sensors (LS1, LS2, LS4, LS5).
+
+Logic:
+
+Outer sensors (LS1/LS5) trigger small PWM corrections (LINE_ADJ_low).
+
+Inner sensors (LS2/LS4) trigger large PWM corrections (LINE_ADJ_high).
+
+Stop Phase (>11s):
+
+Monitors Center Sensor (LS3).
+
+Stops all motors if a black line is detected.
+
+2. PID Control
+
+Three PID controllers (PID.h) run continuously to maintain motion quality:
+
+pid_vL & pid_vR: Maintain wheel target speeds (KP=0.2).
+
+pid_heading: Keeps the robot moving straight by minimizing encoder difference (KP=0.8).
+
+3. Data Logging & Replay
+
+The system includes a circular buffer bumpBuf to record stability events:
+
+During the run, it logs whenever the bump state changes (e.g., from "Aligned" to "Left Ahead").
+
+Post-Run Analysis: Once the robot stops, it enters a "Replay Mode". It prints the Total Running Time and a list of all 01 (Left Ahead) and 10 (Right Ahead) transitions to the Serial Monitor. This allows researchers to quantify stability without external tracking systems.
 
 📂 Project Structure
 
-├── src
-│   ├── main.cpp           # Main control loop and FSM
-│   ├── Strategy_A.cpp     # Asymmetric Control Implementation
-│   ├── Strategy_B.cpp     # Symmetric PID Implementation
-│   ├── Strategy_C.cpp     # Sensor Fusion Implementation
-│   ├── Sensors.cpp        # Bump and Line sensor calibration & reading
-│   └── Motors.cpp         # PWM and PID controller logic
-├── docs                   # Experimental data and diagrams
-├── README.md
-└── LICENSE
+├── Dual_Robot_Box_Pushing.ino  # Main control loop, phases, and logging logic
+├── Encoders.h                  # Interrupt Service Routines for wheel encoders
+├── Motors.h                    # Motor driver class
+├── PID.h                       # PID control class
+├── Kinematics.h                # Odometry calculation
+├── oled.h / lcd.h              # Display status (Bump State / Time)
+└── README.md
 
 🛠️ How to Run
+Dependencies: Ensure you have the Pololu3piPlus32U4 libraries installed.
 
-Dependencies: Ensure you have the Pololu 3pi+ Arduino libraries installed.
+Upload: Flash the Dual_Robot_Box_Pushing.ino to both robots.
 
-Calibration:
+Start:
 
-Run the calibration_routine first to set min/max values for line sensors.
+Place robots behind the box.
 
-Calibrate bump sensors to determine discharge time thresholds.
+Power on. The OLED will show "Bump+Line Ctrl".
 
-Select Strategy: Uncomment the desired strategy (MODE_A, MODE_B, or MODE_C) in main.cpp.
+The robot starts immediately (or upon reset).
 
-Deploy: Upload the code to both Pololu robots simultaneously.
+During Run: Watch the OLED for real-time Bump Status (BL: 0/1, BR: 0/1).
+
+After Stop: Connect USB and open Serial Monitor (115200 baud) to view the performance report and stability logs.
 
 🤝 Contributing
 
