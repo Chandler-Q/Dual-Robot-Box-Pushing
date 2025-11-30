@@ -52,3 +52,38 @@ Alignment (Phase) Correction: Uses bump sensors to detect if one robot is ahead 
 Front Press (Ahead): Reduce speed.
 
 Rear Press (Behind): Increase speed.
+
+📂 Project Structure
+
+├── src
+│   ├── main.cpp           # Main control loop and FSM
+│   ├── Strategy_A.cpp     # Asymmetric Control Implementation
+│   ├── Strategy_B.cpp     # Symmetric PID Implementation
+│   ├── Strategy_C.cpp     # Sensor Fusion Implementation
+│   ├── Sensors.cpp        # Bump and Line sensor calibration & reading
+│   └── Motors.cpp         # PWM and PID controller logic
+├── docs                   # Experimental data and diagrams
+├── README.md
+└── LICENSE
+
+🛠️ How to Run
+
+Dependencies: Ensure you have the Pololu 3pi+ Arduino libraries installed.
+
+Calibration:
+
+Run the calibration_routine first to set min/max values for line sensors.
+
+Calibrate bump sensors to determine discharge time thresholds.
+
+Select Strategy: Uncomment the desired strategy (MODE_A, MODE_B, or MODE_C) in main.cpp.
+
+Deploy: Upload the code to both Pololu robots simultaneously.
+
+🤝 Contributing
+
+Contributions are welcome! Please submit a Pull Request or open an issue for any bugs found in the PID tuning or sensor fusion logic.
+
+📄 License
+
+MIT License
